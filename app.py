@@ -5,7 +5,7 @@ from datetime import date
 
 # 1. 網頁基本設定 & 隱藏側邊欄多餘內容
 st.set_page_config(
-    page_title="✈️ 202602日本關西", 
+    page_title="✈️ 我們的雲端旅遊手冊", 
     layout="wide", 
     page_icon="🌍",
     initial_sidebar_state="expanded"
@@ -21,22 +21,20 @@ def get_data(sheet_name):
         data = data.dropna(how="all")
         return data
     except Exception as e:
-        st.error(f"讀取分頁【{sheet_name}】失敗，請檢查名稱。")
+        st.error(f"讀取分頁【{sheet_name}】失敗，請檢查 Google Sheets 分頁名稱是否完全正確。")
         return pd.DataFrame()
 
 # --- 2. 側邊欄：實用連結與工具 ---
 with st.sidebar:
     st.header("🧳 旅遊工具箱")
     
-    # 常用網站連結按鈕
     st.subheader("🔗 快速連結")
     st.link_button("🌐 Visit Japan Web", "https://vjw-lp.digital.go.jp/zh-hant/")
-    st.link_button("🏮 日本氣象查詢 (Yahoo)", "https://weather.yahoo.co.jp/weather/")
+    st.link_button("🏮 日本氣象查詢", "https://www.japan.travel/tw/weather/")
     st.link_button("🔤 Google 翻譯", "https://translate.google.com/")
     
     st.divider()
     
-    # 匯率快速換算
     st.subheader("💱 快速匯率換算")
     rate = st.number_input("1 JPY 換 TWD", value=0.2150, format="%.4f")
     jpy_amt = st.number_input("輸入日幣", min_value=0)
@@ -55,11 +53,10 @@ tab1, tab2, tab3, tab4 = st.tabs(["📅 每日行程", "💰 費用明細", "✅
 
 # --- Tab 1: 每日行程 ---
 with tab1:
-    # 讀取資料
     df_itinerary = get_data("itinerary")
     
     if not df_itinerary.empty:
-        # 資料預處理
+        # 資料轉換
         df_itinerary["日期"] = pd.to_datetime(df_itinerary["日期"], errors='coerce')
         df_itinerary = df_itinerary.dropna(subset=["日期"])
         df_itinerary["日期"] = df_itinerary["日期"].dt.date
@@ -71,15 +68,17 @@ with tab1:
         
         for i, d in enumerate(unique_dates):
             is_past = d < today
-            with st.expander(f"Day {i+1}：{d} {'⌛ (已結束)' if is_past else '🚩'}", expanded=not is_past):
+            status_icon = "⌛" if is_past else "🚩"
+            with st.expander(f"Day {i+1}：{d} {status_icon} {'(已結束)' if is_past else ''}", expanded=not is_past):
                 day_data = df_itinerary[df_itinerary["日期"] == d].sort_values("時間")
                 for _, row in day_data.iterrows():
                     col_t, col_c = st.columns([1, 5])
                     col_t.info(f"**{row['時間']}**")
                     with col_c:
                         st.write(f"**{row['活動']}**")
-                        if pd.notna(row['備註']): st.caption(f"📝 {row['備註']}")
-                        # 連結至地圖
+                        if pd.notna(row['備註']) and str(row['備註']) != "nan":
+                            st.caption(f"📝 {row['備註']}")
+                        # 導覽模式按鈕串聯地圖連結
                         if pd.notna(row['地圖連結']) and str(row['地圖連結']).startswith("http"):
                             st.link_button("📍 開啟導航", row['地圖連結'])
         
@@ -91,10 +90,10 @@ with tab1:
             df_itinerary, 
             num_rows="dynamic", 
             use_container_width=True, 
-            hide_index=True,  # 隱藏編號欄
+            hide_index=True, # 刪除編號欄
             column_config={
                 "日期": st.column_config.DateColumn("日期", format="YYYY-MM-DD"),
-                "地圖連結": st.column_config.LinkColumn("地圖連結", placeholder="貼上 Google Map 網址")
+                "地圖連結": st.column_config.LinkColumn("地圖連結", help="請貼上完整的 Google 地圖網址")
             },
             key="itinerary_editor"
         )
@@ -103,7 +102,7 @@ with tab1:
             st.success("行程已同步！")
             st.rerun()
     else:
-        st.warning("請在 Google Sheets 填入行程資料。")
+        st.warning("請在 Google Sheets 的 itinerary 分頁填入資料。")
 
 # --- Tab 2: 費用明細 ---
 with tab2:
@@ -114,7 +113,7 @@ with tab2:
             df_expenses, 
             num_rows="dynamic", 
             use_container_width=True, 
-            hide_index=True, # 隱藏編號欄
+            hide_index=True, # 刪除編號欄
             key="expense_editor"
         )
         if st.button("💰 儲存費用更改", key="save_expenses"):
@@ -122,7 +121,7 @@ with tab2:
             st.success("費用已同步！")
             st.rerun()
         
-        # 計算總預算
+        # 計算台幣
         edited_expenses["金額"] = pd.to_numeric(edited_expenses["金額"], errors='coerce').fillna(0)
         edited_expenses["匯率"] = pd.to_numeric(edited_expenses["匯率"], errors='coerce').fillna(1)
         total_twd = (edited_expenses["金額"] * edited_expenses["匯率"]).sum()
@@ -135,13 +134,14 @@ with tab3:
     st.subheader("✅ 待辦清單")
     df_tasks = get_data("tasks")
     if not df_tasks.empty:
+        # 強制轉換狀態為布林值以顯示勾選框
         df_tasks["狀態"] = df_tasks["狀態"].astype(str).str.upper().isin(["TRUE", "1", "YES", "T"]).astype(bool)
         
         edited_tasks = st.data_editor(
             df_tasks,
             num_rows="dynamic",
             use_container_width=True,
-            hide_index=True, # 隱藏編號欄
+            hide_index=True, # 刪除編號欄
             column_config={"狀態": st.column_config.CheckboxColumn("狀態", default=False)},
             key="tasks_editor"
         )
@@ -159,7 +159,7 @@ with tab4:
             df_notes, 
             num_rows="dynamic", 
             use_container_width=True, 
-            hide_index=True, # 隱藏編號欄
+            hide_index=True, # 刪除編號欄
             column_config={"網址連結": st.column_config.LinkColumn("網址連結")},
             key="notes_editor"
         )
