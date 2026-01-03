@@ -5,7 +5,7 @@ from datetime import date
 
 # 1. 網頁基本設定 & 隱藏側邊欄多餘內容
 st.set_page_config(
-    page_title="✈️ 我們的雲端旅遊手冊", 
+    page_title="✈️ 202602日本關西", 
     layout="wide", 
     page_icon="🌍",
     initial_sidebar_state="expanded"
